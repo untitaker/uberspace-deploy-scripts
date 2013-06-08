@@ -85,8 +85,6 @@ RewriteBase /
 RewriteRule ^(.*)$ http://localhost:''' + port + '''/$1 [P,L]
 RequestHeader set X-Forwarded-Proto https env=HTTPS
 
-Options +FollowSymLinks
-
 <IfModule mod_deflate.c>
     # Insert filter
     SetOutputFilter DEFLATE
