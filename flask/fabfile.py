@@ -23,8 +23,12 @@ rsync_ignore = '''__pycache__
 fabfile.py
 testserver.py'''.split()
 
+# gunicorn
+gunicorn_workers = 4
+gunicorn_workers_class = 'sync'
 
 ### end of config
+
 local_base = dirname(abspath(__file__))
 local_package_base = join(local_base, package_name)
 local_static = join(local_package_base, 'static')
@@ -34,6 +38,11 @@ remote_package_base = join(remote_base, package_name)
 remote_virtual = '~/virtual/{}'.format(domain_name)
 remote_static = join(remote_virtual, 'static')
 service_dir = '~/service/{}'.format(service_name)
+
+gunicorn_requirements = ''
+if gunicorn_workers_class != 'sync':
+    # gevent, eventlet, tornado
+    gunicorn_requirements = gunicorn_workers_class
 
 
 @task
@@ -67,8 +76,8 @@ def install():
     with cd(remote_base):
         if not exists(remote_base + '/env'):
             run('virtualenv-2.7 env --distribute')
-            run('. env/bin/pip install gunicorn')
-        run('. env/bin/pip install -r ./requirements.txt')
+        run('env/bin/pip install -U gunicorn {}'.format(gunicorn_requirements))
+        run('env/bin/pip install -r ./requirements.txt')
         run('cp -R {}/static {}'.format(remote_package_base, remote_virtual))
 
 @task
@@ -117,8 +126,14 @@ ErrorDocument 503 "<h1>Bad Gateway</h1>"
 asset_daemonsh = r'''
 cd {remote_base}
 . env/bin/activate
-exec gunicorn -w 4 -b 127.0.0.1:{port} config_{package_name}:app
-'''.format(remote_base=remote_base, package_name=package_name, port=port)
+exec gunicorn -w {wnum} -k {wclass} -b 127.0.0.1:{port} config_{package_name}:app
+'''.format(
+    wnum=gunicorn_workers,
+    wclass=gunicorn_workers_class,
+    remote_base=remote_base,
+    package_name=package_name,
+    port=port
+)
 
 asset_configfile = '#!/usr/bin/env python'
 asset_configfile += '\nfrom {} import mk_app'.format(package_name)
@@ -134,7 +149,7 @@ from werkzeug.contrib.fixers import ProxyFix
 logging.basicConfig(level=logging.WARNING)
 
 app = mk_app({
-    'CACHE_TYPE': 'filesystem'
+    'FLASK_CONFIG_EXAMPLE': True
 })
 
 app.wsgi_app = ProxyFix(app.wsgi_app)
